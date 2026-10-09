@@ -1,3 +1,4 @@
+-- Active: 1788519230432@@127.0.0.1@3306@smartcoffee_dml_monyke
 
 --AULA 09 - DQL (DATA QUERY LANGUAGE) - LINGUAGEM DE CONSULTA DE DADOS
 
@@ -80,7 +81,7 @@ SELECT nome , cidade FROM cliente
 WHERE cidade IN ('Limeira','Piracicaba','Americanas');
 
 SELECT nome, cidade FROM cliente
-WHERE cidade NOT IN ('Limeira', 'Piracicaba') ;
+WHERE cidade NOT IN ('Limeira', 'Americana') ;
 
 -- EX 8: LIKE - PESQUISA POR TEXTO
 --CORINGAS 
@@ -88,7 +89,7 @@ WHERE cidade NOT IN ('Limeira', 'Piracicaba') ;
 -- APENAS UM CARACTER
 
 SELECT nome FROM produto
-WHERE nome LIKE 'Café$';
+WHERE nome LIKE '$Café$';
 --CONSULTAR PELA PALAVRA QUE DESEJA E QUAL COMEÇA
 
 SELECT nome FROM produto
@@ -103,7 +104,7 @@ SELECT nome FROM PRODUTO
 WHERE nome LIKE '%o_o%'
 
 -- EX 9: NULL - AUSENCIA DE VALOR 
-SELECT nome , telfone FROM cliente
+SELECT nome , telefone FROM cliente
 WHERE telefone IS NULL;
 
 SELECT nome , telefone FROM cliente
@@ -202,5 +203,22 @@ SELECT id_categoria , COUNT(*) AS QTDE_PRODUTOS
 FROM produto
 GROUP BY id_categoria;
 --QUANTIDADE DE PRODUTOS POR CATEGORIA
+-- EX 16: HAVING - CRIAR CONDIÇÕES  EM AGRUPAMENTOS 
+--WHERE FILTRA LINHAS ANTES DO AGRUPAMENTO
+--HAVING FILTRA LINHAS DEPOPIS DO GROUP BY
 
-SELECT
+SELECT cidade, COUNT(*) AS QTDE_CLIENTES
+FROM cliente
+GROUP BY cidade
+HAVING COUNT (*) <= 2
+-- CONSULTA PARA CIDADE COM PELO MENOS DOIS CLIENTES
+
+-- EX 17: RESUMO DE UM CONSULTA COMPLETA
+-- SELECT colunas
+-- FROM tabelas 
+-- WHERE condicao
+-- GROUP BY coluna_agrupar
+-- HAVING condicao_agrupar
+-- ORDER BY colunas
+-- LIMIT quantidade;
+
