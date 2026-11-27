@@ -1,0 +1,187 @@
+-- ATIVIDADE AMPLIADA - AULAS 14 E 15
+-- Aluno: [Arthur de Medeiros Nunes]
+-- Turma: [2 DEVIS A]
+
+-- 1. Function calcular_total_item
+-- Calcula o valor total multiplicando quantidade pelo preço unitário
+DELIMITER $$
+CREATE FUNCTION calcular_total_item(p_qtd INT, p_preco DECIMAL(10,2))
+RETURNS DECIMAL(10,2)
+DETERMINISTIC
+BEGIN
+    RETURN p_qtd * p_preco;
+END $$
+DELIMITER ;
+
+-- 2. Function classificar_fidelidade
+-- Classifica o cliente com base no valor total já gasto
+
+DELIMITER $$
+CREATE FUNCTION classificar_fidelidade(p_total_gasto DECIMAL(10,2))
+RETURNS VARCHAR(20)
+DETERMINISTIC
+BEGIN
+    IF p_total_gasto >= 5000 THEN
+        RETURN 'OURO';
+    ELSEIF p_total_gasto >= 1000 THEN
+        RETURN 'PRATA';
+    ELSE
+        RETURN 'BRONZE';
+    END IF;
+END $$
+DELIMITER ;
+
+
+-- 3. Function calcular_desconto
+-- Calcula o valor em reais do desconto dado um percentual
+
+DELIMITER $$
+CREATE FUNCTION calcular_desconto(p_valor DECIMAL(10,2), p_percentual DECIMAL(5,2))
+RETURNS DECIMAL(10,2)
+DETERMINISTIC
+BEGIN
+    RETURN p_valor * (p_percentual / 100);
+END $$
+DELIMITER ;
+
+
+-- 4. Function situacao_estoque
+-- Retorna o status visual do saldo de um produto
+
+DELIMITER $$
+CREATE FUNCTION situacao_estoque(p_qtd INT)
+RETURNS VARCHAR(20)
+DETERMINISTIC
+BEGIN
+    IF p_qtd <= 0 THEN
+        RETURN 'ESGOTADO';
+    ELSEIF p_qtd <= 10 THEN
+        RETURN 'ESTOQUE BAIXO';
+    ELSE
+        RETURN 'NORMAL';
+    END IF;
+END $$
+DELIMITER ;
+
+
+-- 5. Testar todas em SELECT
+
+SELECT 
+    calcular_total_item(3, 45.50) AS total_item,
+    classificar_fidelidade(2500.00) AS nivel_cliente,
+    calcular_desconto(200.00, 15) AS valor_desconto,
+    situacao_estoque(5) AS status_estoque;
+
+
+-- 6. Criar auditoria_preco
+
+CREATE TABLE AUDITORIA_PRECO (
+    ID_AUDITORIA INT AUTO_INCREMENT,
+    ID_PRODUTO INT NOT NULL,
+    PRECO_ANTERIOR DECIMAL(10,2),
+    PRECO_NOVO DECIMAL(10,2),
+    ALTERADO_EM DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT PK_ID_AUDITORIA PRIMARY KEY (ID_AUDITORIA),
+    CONSTRAINT FK_PRODUTO FOREIGN KEY (ID_PRODUTO) REFERENCES PRODUTO (ID_PRODUTO)
+);
+
+
+-- 7. Trigger AFTER UPDATE de preço
+-- Registra na auditoria apenas quando o preço sofrer alteração
+
+DELIMITER $$
+CREATE TRIGGER TRG_PRODUTO_AFTER_UPDATE_PRECO
+AFTER UPDATE ON PRODUTO
+FOR EACH ROW
+BEGIN
+    IF OLD.PRECO <> NEW.PRECO THEN
+        INSERT INTO AUDITORIA_PRECO (ID_PRODUTO, PRECO_ANTERIOR, PRECO_NOVO)
+        VALUES (NEW.ID_PRODUTO, OLD.PRECO, NEW.PRECO);
+    END IF;
+END $$
+DELIMITER ;
+
+
+-- 8. Trigger BEFORE UPDATE impedindo estoque negativo
+DELIMITER $$
+CREATE TRIGGER TRG_ESTOQUE_BEFORE_UPDATE
+BEFORE UPDATE ON ESTOQUE
+FOR EACH ROW
+BEGIN
+    IF NEW.QUANTIDADE < 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'ESTOQUE NÃO PODE FICAR NEGATIVO';
+    END IF;
+END $$
+DELIMITER ;
+
+-- 9. Criar log_exclusao_produto
+CREATE TABLE LOG_EXCLUSAO_PRODUTO (
+    ID_LOG INT AUTO_INCREMENT,
+    ID_PRODUTO INT,
+    NOME_PRODUTO VARCHAR(120),
+    EXCLUIDO_EM DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT PK_ID_LOG PRIMARY KEY (ID_LOG)
+);
+
+-- 10. Trigger AFTER DELETE
+DELIMITER $$
+CREATE TRIGGER TRG_PRODUTO_AFTER_DELETE
+AFTER DELETE ON PRODUTO
+FOR EACH ROW
+BEGIN
+    INSERT INTO LOG_EXCLUSAO_PRODUTO (ID_PRODUTO, NOME_PRODUTO)
+    VALUES (OLD.ID_PRODUTO, OLD.NOME);
+END $$
+DELIMITER ;
+
+-- 11. Demonstrar operação bloqueada
+-- O comando abaixo falha devido à trigger TRG_ESTOQUE_BEFORE_UPDATE
+UPDATE ESTOQUE 
+SET QUANTIDADE = -5 
+WHERE ID_PRODUTO = 1;
+-- Resultado esperado: Error Code: 1644. ESTOQUE NÃO PODE FICAR NEGATIVO
+
+-- 12. Demonstrar histórico gerado automaticamente
+-- Atualizando preço e conferindo a auditoria:
+UPDATE PRODUTO SET PRECO = 99.90 WHERE ID_PRODUTO = 1;
+SELECT * FROM AUDITORIA_PRECO;
+
+-- Excluindo produto e conferindo o log:
+DELETE FROM PRODUTO WHERE ID_PRODUTO = 2;
+SELECT * FROM LOG_EXCLUSAO_PRODUTO;
+
+-- 13. SHOW TRIGGERS
+SHOW TRIGGERS;
+
+-- 14. SHOW CREATE TRIGGER
+SHOW CREATE TRIGGER TRG_ESTOQUE_BEFORE_UPDATE;
+
+-- 15. Explique: Function x Procedure x View x Trigger
+/*
+- FUNCTION: Rotina armazenada que recebe parâmetros, executa um cálculo/lógica e obrigatoriamente retorna um único valor. Pode ser usada diretamente dentro de comandos SELECT, WHERE e ORDER BY.
+- PROCEDURE: Rotina armazenada que executa um bloco de comandos SQL (INSERT, UPDATE, DELETE, SELECT). É acionada manualmente via comando CALL, pode receber/devolver múltiplos parâmetros, mas não pode ser usada dentro de um SELECT.
+- VIEW: Tabela virtual baseada no resultado de uma consulta SELECT. Não armazena dados fisicamente (apenas a query), servindo para simplificar consultas complexas e restringir acesso a colunas sensíveis.
+- TRIGGER: Gatilho disparado automaticamente pelo banco de dados antes (BEFORE) ou depois (AFTER) de um evento de manipulação de dados (INSERT, UPDATE, DELETE) em uma tabela específica. Ideal para auditorias e validações automáticas.
+*/
+
+-- 16. Cite 3 regras em que CHECK/UNIQUE/FK seriam melhores que Trigger
+/*
+1. Impedir preço menor ou igual a zero (CHECK): Usar "CHECK (PRECO > 0)" na criação da tabela é muito mais rápido, nativo e exige menos código que criar uma Trigger BEFORE INSERT/UPDATE com SIGNAL.
+2. Impedir cadastro de CPF ou e-mail duplicado (UNIQUE): A constraint UNIQUE cria um índice otimizado para validar unicidade instantaneamente, sem precisar fazer um SELECT COUNT(*) dentro de uma Trigger.
+3. Garantir que um produto pertença a uma categoria válida (FOREIGN KEY): A chave estrangeira mantém a integridade referencial nativa e oferece ações automáticas (ON DELETE RESTRICT/CASCADE), sendo mais segura e performática que validar manualmente via Trigger.
+*/
+
+-- DESAFIO: Automação própria e justificativa
+-- Cenário: Padronizar automaticamente o nome do produto em MAIÚSCULO e remover espaços extras nas pontas antes de inserir ou atualizar.
+DELIMITER $$
+CREATE TRIGGER TRG_PRODUTO_PADRONIZA_NOME_INSERT
+BEFORE INSERT ON PRODUTO
+FOR EACH ROW
+BEGIN
+    SET NEW.NOME = UPPER(TRIM(NEW.NOME));
+END $$
+DELIMITER ;
+
+/*
+JUSTIFICATI
